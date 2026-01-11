@@ -1,0 +1,34 @@
+# Arquivos compilados
+*.o
+*.out
+*.exe
+simulador
+simulator
+
+# Binários
+bin/
+dist/
+
+# Backups
+*~
+*.bak
+*.swp
+
+# IDE/Editor
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs
+*.log
+debug.log
+
+# macOS
+.DS_Store
+
+# Linux
+*.so
+*.a
+
+# Dependências
+deps/
