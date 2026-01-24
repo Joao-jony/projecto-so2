@@ -13,6 +13,17 @@ Integrantes do grupo:
     Yuri Dias
     Joveth Lopes
 
-Compilação
+Compilação e Execução
+
 ```bash
+# Compilar projeto completo
 make
+
+# Executar simulação
+make run
+
+# Compilar e executar testes de integração
+make teste
+
+# Limpar arquivos compilados
+make clean
