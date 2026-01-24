@@ -295,13 +295,13 @@ void imprimir_fila(FilaPrioridade* fila) {
     pthread_mutex_unlock(&fila->lock);
 }
 
-/* Bloqueia vendas para público (cenário do enunciado) */
+
 void bloquear_vendas_publico(FilaPrioridade* fila) {
     if (!fila) return;
     
     pthread_mutex_lock(&fila->lock);
     
-    // Remove todos os clientes públicos da fila
+
     Node* atual = fila->frente;
     Node* anterior = NULL;
     int removidos = 0;
