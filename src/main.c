@@ -12,6 +12,7 @@
 
 #define SIMULACAO_ATIVA 1
 #define TEMPO_TOTAL_SIMULACAO 30 
+#define INTERVALO_ENTRE_TURNOS 3 // Intervalo de 3 segundos entre turnos
 
 static volatile int sistema_executando = 1;
 static FilaPrioridade* fila_global = NULL;
@@ -20,6 +21,42 @@ void handler_sigint(int sig) {
     (void)sig;
     printf("\n\n⚠️  Interrupção recebida. Encerrando sistema...\n");
     sistema_executando = 0;
+}
+
+/* Funções wrapper para contratações */
+static void* wrapper_contratacao(void* arg) {
+    (void)arg;
+    printf("[THREAD] Processo de contratação iniciado\n");
+    
+    // Simular diferentes tipos de funcionários
+    const char* nomes[] = {"João Silva", "Maria Santos", "Carlos Oliveira", 
+                          "Ana Costa", "Pedro Almeida"};
+    const char* cargos[] = {"Analista", "Desenvolvedor", "Gerente", 
+                           "Coordenador", "Consultor"};
+    
+    int idx = rand() % 5;
+    float salario = 50000 + (rand() % 10) * 5000;
+    
+    iniciar_processo_contratacao(nomes[idx], cargos[idx], salario);
+    return NULL;
+}
+
+static void* wrapper_demissao(void* arg) {
+    (void)arg;
+    printf("[THREAD] Processo de demissão iniciado\n");
+    
+    // Verificar se há funcionários para demitir
+    // Em um sistema real, você precisaria de lógica para selecionar qual funcionário demitir
+    // Por enquanto, apenas exibimos uma mensagem
+    int ativos = get_funcionarios_ativos();
+    if (ativos > 0) {
+        printf("[THREAD] %d funcionários ativos disponíveis para demissão\n", ativos);
+        // Nota: Para realmente demitir, precisaria do ID do funcionário
+        // demitir_funcionario(id_do_funcionario);
+    } else {
+        printf("[THREAD] Nenhum funcionário ativo para demitir\n");
+    }
+    return NULL;
 }
 
 /* Inicializar todos os módulos */
@@ -44,7 +81,7 @@ int inicializar_sistema(void) {
         return 0;
     }
     
-    // 3. Inicializar sistema de vendas (CORRIGIDO)
+    // 3. Inicializar sistema de vendas
     inicializar_sistema_vendas(fila_global); 
     inicializar_sistema_rh();
     
@@ -55,57 +92,73 @@ int inicializar_sistema(void) {
 void popular_dados_iniciais(void) {
     printf(" Adicionando clientes à fila...\n");
     
-    // 20 empresas
+    // 30 empresas
     for (int i = 1; i <= 30; i++) {
         inserir_cliente(fila_global, 1000 + i, EMPRESA);
     }
     
-    // 50 clientes público
+    // 40 clientes público
     for (int i = 1; i <= 40; i++) {
         inserir_cliente(fila_global, 2000 + i, PUBLICO);
     }
     
-    printf("  • 70 clientes adicionados (20 empresas, 50 público)\n");
+    printf("  • 70 clientes adicionados (30 empresas, 40 público)\n");
     
-    printf("  contratações iniciais...\n");
-    for (int i = 0; i < 3; i++) {
-        // Usar funções corretas do módulo de contratações
-        iniciar_processo_contratacao("Funcionário Inicial", "Cargo Inicial", 50000 + i * 10000);
-        sleep(1);
-    }
+    // NÃO iniciar contratações aqui - apenas nos intervalos entre turnos
+    printf("  • Contratações serão realizadas apenas nos intervalos entre turnos\n");
 }
 
-static void* wrapper_contratacao(void* arg) {
-    (void)arg;
-    // Não existe simular_contratacao_thread, então usamos funções diretas
-    printf("[THREAD] Processo de contratação iniciado\n");
-    iniciar_processo_contratacao("Novo Funcionário", "Analista", 60000);
-    return NULL;
-}
-
-static void* wrapper_demissao(void* arg) {
-    (void)arg;
-    printf("[THREAD] Processo de demissão iniciado\n");
-    if (get_funcionarios_ativos() > 0) {
-        printf("[THREAD] Demissão simulada \n");
-    }
-    return NULL;
-}
-
-/* Executar cenários de teste */
-void executar_cenarios_teste(void) {
-    printf("\n[SISTEMA] Executando cenários de teste...\n");
+/* Executar turnos com intervalos para contratações */
+void executar_cenarios_teste_com_intervalos(void) {
+    printf("\n[SISTEMA] Executando cenários de teste com intervalos...\n");
     
-    // Cenário 1: Vendas normais por turno
-    printf("\n--- CENÁRIO 1: Vendas por Turno ---\n");
-    printf("Turno da Manhã (35 vendas):\n");
+    // Cenário 1: Vendas normais por turno com intervalos
+    printf("\n--- CENÁRIO 1: Vendas por Turno com Intervalos ---\n");
+    
+    // Turno da Manhã
+    printf("\nTurno da Manhã (35 vendas):\n");
     iniciar_turno_vendas(MANHA);
     
+    // INTERVALO PARA CONTRATAÇÕES
+    printf("\n--- INTERVALO ENTRE TURNOS (3 segundos) ---\n");
+    printf("Processando contratações no intervalo...\n");
+    for (int i = 0; i < 2; i++) {
+        pthread_t thread_contratacao;
+        pthread_create(&thread_contratacao, NULL, wrapper_contratacao, NULL);
+        pthread_detach(thread_contratacao);
+        usleep(500000); // 0.5 segundos entre contratações
+    }
+    sleep(INTERVALO_ENTRE_TURNOS);
+    
+    // Turno da Tarde
     printf("\nTurno da Tarde (35 vendas):\n");
     iniciar_turno_vendas(TARDE);
     
+    // INTERVALO PARA CONTRATAÇÕES
+    printf("\n--- INTERVALO ENTRE TURNOS (3 segundos) ---\n");
+    printf("Processando contratações no intervalo...\n");
+    for (int i = 0; i < 3; i++) {
+        pthread_t thread_contratacao;
+        pthread_create(&thread_contratacao, NULL, wrapper_contratacao, NULL);
+        pthread_detach(thread_contratacao);
+        usleep(500000);
+    }
+    sleep(INTERVALO_ENTRE_TURNOS);
+    
+    // Turno da Noite
     printf("\nTurno da Noite (30 vendas):\n");
     iniciar_turno_vendas(NOITE);
+    
+    // INTERVALO FINAL PARA CONTRATAÇÕES
+    printf("\n--- INTERVALO FINAL (3 segundos) ---\n");
+    printf("Processando contratações no intervalo...\n");
+    for (int i = 0; i < 2; i++) {
+        pthread_t thread_contratacao;
+        pthread_create(&thread_contratacao, NULL, wrapper_contratacao, NULL);
+        pthread_detach(thread_contratacao);
+        usleep(500000);
+    }
+    sleep(INTERVALO_ENTRE_TURNOS);
     
     // Cenário 2: Estoque vazio + 30 empresas
     printf("\n--- CENÁRIO 2: Estoque Esgotado + 30 Empresas ---\n");
@@ -128,27 +181,17 @@ void executar_cenarios_teste(void) {
     
     printf("Processando novas solicitações...\n");
     iniciar_turno_vendas(MANHA);
-
-    printf("\n--- CENÁRIO 3: Sistema de RH ---\n");
-    printf("Simulando fluxo de contratações/demissoes...\n");
     
-    for (int i = 0; i < 5; i++) {
-        pthread_t thread_contratacao;
-        pthread_create(&thread_contratacao, NULL, 
-                      wrapper_contratacao, NULL);  
-        pthread_detach(thread_contratacao);
-        
-        usleep(500000); 
-    }
-    
+    // INTERVALO PARA DEMISSÕES
+    printf("\n--- INTERVALO PARA AJUSTES DE RH ---\n");
+    printf("Processando demissões no intervalo...\n");
     for (int i = 0; i < 2; i++) {
         pthread_t thread_demissao;
-        pthread_create(&thread_demissao, NULL, 
-                      wrapper_demissao, NULL); 
+        pthread_create(&thread_demissao, NULL, wrapper_demissao, NULL);
         pthread_detach(thread_demissao);
-        
         usleep(500000);
     }
+    sleep(INTERVALO_ENTRE_TURNOS);
 }
 
 /* Loop principal do sistema */
@@ -158,51 +201,75 @@ void loop_principal(void) {
     
     time_t inicio = time(NULL);
     int ciclos = 0;
+    int ultimo_turno_processado = -1;
     
     while (sistema_executando && 
            difftime(time(NULL), inicio) < TEMPO_TOTAL_SIMULACAO) {
         
         ciclos++;
         
-        // Mostrar status a cada 5 ciclos
+        // A cada 5 ciclos, processar um "turno" simulado
         if (ciclos % 5 == 0) {
+            int turno_atual = (ciclos / 5) % 3; // Alterna entre 0, 1, 2 (cast para int)
+            
+            if (turno_atual != ultimo_turno_processado) {
+                // Se houve mudança de turno, processar intervalo primeiro
+                if (ultimo_turno_processado != -1) {
+                    printf("\n--- INTERVALO ENTRE TURNOS ---\n");
+                    printf("Processando operações de RH no intervalo...\n");
+                    
+                    // Executar algumas operações de RH no intervalo
+                    int num_operacoes = 1 + (rand() % 3);
+                    for (int i = 0; i < num_operacoes; i++) {
+                        if (rand() % 2 == 0) {
+                            pthread_t thread_contratacao;
+                            pthread_create(&thread_contratacao, NULL, 
+                                          wrapper_contratacao, NULL);
+                            pthread_detach(thread_contratacao);
+                        } else {
+                            pthread_t thread_demissao;
+                            pthread_create(&thread_demissao, NULL, 
+                                          wrapper_demissao, NULL);
+                            pthread_detach(thread_demissao);
+                        }
+                        usleep(300000); // 0.3 segundos entre operações
+                    }
+                    sleep(INTERVALO_ENTRE_TURNOS);
+                }
+                
+                // Processar o turno atual
+                const char* nomes_turnos[] = {"Manhã", "Tarde", "Noite"};
+                printf("\n=== INICIANDO TURNO DA %s ===\n", nomes_turnos[turno_atual]);
+                
+                // Converter int para Turno enum
+                Turno turno_enum;
+                switch(turno_atual) {
+                    case 0: turno_enum = MANHA; break;
+                    case 1: turno_enum = TARDE; break;
+                    case 2: turno_enum = NOITE; break;
+                    default: turno_enum = MANHA; break;
+                }
+                
+                // Processar vendas do turno
+                iniciar_turno_vendas(turno_enum);
+                
+                ultimo_turno_processado = turno_atual;
+            }
+        }
+        
+        // Mostrar status a cada 3 ciclos
+        if (ciclos % 3 == 0) {
             printf("\n--- STATUS DO SISTEMA [Ciclo %d] ---\n", ciclos);
             
             // Estoque
             printf("Estoque: %d/%d cartões disponíveis\n", 
                    estoque_disponivel(), TOTAL_CARTOES);
             
-            // Fila
-            imprimir_fila(fila_global); 
-            
-            // Agências
-            exibir_relatorio_agencias();  
-            
             // RH
-            printf("RH: %d funcionários ativos\n", get_funcionarios_ativos());
+            printf("RH: %d funcionários ativos | %d vagas disponíveis\n", 
+                   get_funcionarios_ativos(), get_vagas_disponiveis());
             
             printf("--------------------------------\n");
-        }
-        
-        // Processar algumas vendas
-        if (ciclos % 3 == 0 && estoque_disponivel() > 0) {
-            printf("[SISTEMA] Processando vendas concorrentes...\n");
-            iniciar_vendas_concorrentes(MANHA);
-        }
-        
-        // Simular operações de RH aleatórias
-        if (rand() % 4 == 0) {
-            if (rand() % 2 == 0) {
-                pthread_t thread;
-                pthread_create(&thread, NULL, 
-                              wrapper_contratacao, NULL); 
-                pthread_detach(thread);
-            } else {
-                pthread_t thread;
-                pthread_create(&thread, NULL, 
-                              wrapper_demissao, NULL);  
-                pthread_detach(thread);
-            }
         }
         
         sleep(1); // 1 segundo entre ciclos
@@ -246,19 +313,22 @@ void gerar_relatorio_final(void) {
     imprimir_estoque();
     
     // Vendas
-    printf("\n VENDAS:\n");
-    exibir_relatorio_agencias();  
+    printf("\nVENDAS:\n");
+    exibir_relatorio_agencias();
     
     // RH
     printf("\nRECURSOS HUMANOS:\n");
-    exibir_contratacoes();  
+    exibir_contratacoes();
+    exibir_estatisticas();
     
     // Estatísticas
     printf("\nESTATÍSTICAS GERAIS:\n");
     printf("  • Cartões vendidos: %d/%d\n", 
            estoque_vendido(), TOTAL_CARTOES);
-    printf("  • Funcionários ativos: %d\n", 
-           get_funcionarios_ativos());
+    printf("  • Funcionários ativos: %d/%d\n", 
+           get_funcionarios_ativos(), LIMITE_CONTRATACOES);
+    printf("  • Vagas disponíveis: %d\n", 
+           get_vagas_disponiveis());
     
     printf("\n========================================\n");
 }
@@ -275,7 +345,8 @@ int main(void) {
     
     popular_dados_iniciais();
     
-    executar_cenarios_teste();
+    // Usar nova função com intervalos
+    executar_cenarios_teste_com_intervalos();
     
     loop_principal();
     

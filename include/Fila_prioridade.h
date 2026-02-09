@@ -2,24 +2,25 @@
 #define FILA_PRIORIDADE_H
 
 #include <pthread.h>
+#include <semaphore.h>
 #include <time.h>
 
 typedef enum {
-    PUBLICO = 0,
-    EMPRESA = 1
+    EMPRESA,
+    PUBLICO
 } TipoCliente;
 
 typedef enum {
-    MANHA,   // Limite 35
-    TARDE,   // Limite 35
-    NOITE    // Limite 30
+    MANHA,
+    TARDE,
+    NOITE
 } Turno;
 
 typedef struct {
     int id_cliente;
     TipoCliente tipo;
-    time_t timestamp;       // Quando entrou na fila
-    int prioridade_calculada; // Cache da prioridade
+    time_t timestamp;
+    int prioridade_calculada;
 } Cliente;
 
 typedef struct Node {
@@ -28,27 +29,24 @@ typedef struct Node {
 } Node;
 
 typedef struct {
-    Node* frente;      // Fila única ordenada por prioridade
+    Node* frente;
     Node* fim;
     int tamanho;
-    pthread_mutex_t lock;  // Mutex para thread-safety
+    pthread_mutex_t lock;       // Mutex para exclusão mútua
+    sem_t semaforo_clientes;    // Semáforo para controle de clientes disponíveis
+    sem_t semaforo_espaco;      // Semáforo para controle de espaço na fila
 } FilaPrioridade;
 
-// Protótipos
-FilaPrioridade* inicializar_fila();
+// Protótipos das funções
+FilaPrioridade* inicializar_fila(void);
 void liberar_fila(FilaPrioridade* fila);
-
 void inserir_cliente(FilaPrioridade* fila, int id_cliente, TipoCliente tipo);
-int calcular_prioridade_cliente(Cliente* cliente);
-
 Cliente* obter_proximo_cliente(FilaPrioridade* fila);
 void remover_cliente_processado(FilaPrioridade* fila, int id_cliente);
-
 int processar_vendas_turno(FilaPrioridade* fila, Turno turno_atual);
 void imprimir_fila(FilaPrioridade* fila);
-
-// Funções auxiliares para o cenário do enunciado
 void bloquear_vendas_publico(FilaPrioridade* fila);
 void adicionar_lote_empresas(FilaPrioridade* fila, int quantidade);
+int calcular_prioridade_cliente(Cliente* cliente);
 
 #endif
