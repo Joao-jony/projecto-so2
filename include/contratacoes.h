@@ -11,7 +11,6 @@
 #define TEMPO_CONTRATACAO_MAX 20 
 #define INTERVALO_EXIBICAO 30     
 
-/* Estados do processo de contratação */
 typedef enum {
     PENDENTE,
     EM_ANALISE,
@@ -21,7 +20,6 @@ typedef enum {
     CANCELADO
 } EstadoProcesso;
 
-/* Estrutura de um funcionário contratado */
 typedef struct Contratacao {
     int id;
     char nome[100];
@@ -31,7 +29,6 @@ typedef struct Contratacao {
     struct Contratacao *prox;
 } Contratacao;
 
-/* Estrutura de um processo de contratação */
 typedef struct ProcessoContratacao {
     int id;
     char nome[100];
@@ -44,7 +41,6 @@ typedef struct ProcessoContratacao {
     struct ProcessoContratacao *prox;
 } ProcessoContratacao;
 
-/* Interface do módulo */
 // Inicialização/Encerramento
 void inicializar_sistema_rh(void);
 void encerrar_sistema_rh(void);
@@ -54,7 +50,7 @@ void configurar_interrupcoes_rh(void);
 void iniciar_thread_verificacao(void);
 void parar_thread_verificacao(void);
 void verificar_interrupcao_rh(void);
-void tratar_interrupcao_rh(int sinal);
+void handler_interrupcao_rh(int sinal);  // Renomeado de tratar_interrupcao_rh
 
 // Timer periódico
 void iniciar_timer_exibicao(void);
@@ -75,7 +71,7 @@ void demitir_funcionario(int id);
 void exibir_processos_pendentes(void);
 void exibir_contratacoes(void);
 void exibir_estatisticas(void);
-void exibir_contratacoes_periodicas(void);
+void exibir_contratacoes_periodicas(void);  // Adicionada declaração
 
 // Thread para processo
 void* thread_processo_contratacao(void* arg);

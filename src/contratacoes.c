@@ -5,7 +5,6 @@
 #include <unistd.h>
 #include <errno.h>
 
-/* Variáveis internas ao módulo */
 static Contratacao *lista_contratados = NULL;
 static ProcessoContratacao *lista_processos = NULL;
 static int total_contratacoes = 0;
@@ -26,13 +25,8 @@ static volatile int interrupcao_ativa = 0;
 void inicializar_sistema_rh(void) {
     printf("[RH] Sistema de Recursos Humanos inicializando...\n");
     
-    // Configurar sistema de interrupções (SEM setitimer!)
     configurar_interrupcoes_rh();
-    
-    // Iniciar timer de exibição periódica
     iniciar_timer_exibicao();
-    
-    // Iniciar thread de verificação periódica (em vez de SIGALRM)
     iniciar_thread_verificacao();
     
     printf("[RH] Sistema pronto. Limite: %d funcionários\n", LIMITE_CONTRATACOES);
@@ -42,23 +36,18 @@ void inicializar_sistema_rh(void) {
 void encerrar_sistema_rh(void) {
     printf("[RH] Encerrando sistema...\n");
     
-    // Parar threads
     parar_timer_exibicao();
     parar_thread_verificacao();
-    
-    // Limpar memória
     limpar_lista();
     
-    // Destruir mutex
     pthread_mutex_destroy(&mutex);
     
     printf("[RH] Sistema encerrado\n");
 }
 
-/* ========== SISTEMA DE INTERRUPÇÕES (CORRIGIDO) ========== */
+/* ========== SISTEMA DE INTERRUPÇÕES ========== */
 
-/* Handler de interrupção customizada */
-static void handler_interrupcao_rh(int sig) {
+void handler_interrupcao_rh(int sig) {
     (void)sig;
     interrupcao_ativa = 1;
     
@@ -75,23 +64,18 @@ static void handler_interrupcao_rh(int sig) {
     printf("  -------------------------- \n\n");
 }
 
-/* Configurar interrupções SEM SIGALRM */
 void configurar_interrupcoes_rh(void) {
-    // Configurar handler para SIGUSR1 (nossa interrupção customizada)
     signal(SIGUSR1, handler_interrupcao_rh);
-    
-    // NÃO usar setitimer() - causa SIGALRM que termina o programa!
     printf("[RH] Sistema de interrupções configurado (usando thread)\n");
 }
 
-/* Thread para verificação periódica (substitui SIGALRM) */
 static void* thread_verificacao_periodica(void* arg) {
     (void)arg;
     
     printf("[RH VERIFICAÇÃO] Thread de verificação iniciada\n");
     
     while (verificacao_ativa) {
-        sleep(3); // Verificar a cada 10 segundos
+        sleep(10);
         
         if (verificacao_ativa) {
             verificar_interrupcao_rh();
@@ -102,21 +86,18 @@ static void* thread_verificacao_periodica(void* arg) {
     return NULL;
 }
 
-/* Iniciar thread de verificação */
 void iniciar_thread_verificacao(void) {
     verificacao_ativa = 1;
     pthread_create(&thread_verificacao, NULL, thread_verificacao_periodica, NULL);
     printf("[RH] Thread de verificação periódica iniciada (10s)\n");
 }
 
-/* Parar thread de verificação */
 void parar_thread_verificacao(void) {
     verificacao_ativa = 0;
     pthread_join(thread_verificacao, NULL);
     printf("[RH] Thread de verificação periódica parada\n");
 }
 
-/* Verificar condição de interrupção */
 void verificar_interrupcao_rh(void) {
     pthread_mutex_lock(&mutex);
     int contratacoes = total_contratacoes;
@@ -124,7 +105,6 @@ void verificar_interrupcao_rh(void) {
     pthread_mutex_unlock(&mutex);
     
     if (contratacoes > demissoes) {
-        // Em vez de raise(SIGUSR1), chamamos o handler diretamente
         printf("[RH VERIFICAÇÃO] Condição de interrupção detectada!\n");
         handler_interrupcao_rh(SIGUSR1);
     }
@@ -132,31 +112,28 @@ void verificar_interrupcao_rh(void) {
 
 /* ========== TIMER DE EXIBIÇÃO PERIÓDICA ========== */
 
-/* Thread para exibição periódica */
 static void* thread_exibicao_periodica(void* arg) {
     (void)arg;
     
     while (timer_ativa) {
-        sleep(INTERVALO_EXIBICAO); // 30 segundos (3 minutos simulados)
+        sleep(INTERVALO_EXIBICAO);
         
         if (timer_ativa) {
             printf("\n [EXIBIÇÃO PERIÓDICA] \n");
             printf("Intervalo: %d segundos (simula 3 minutos)\n", INTERVALO_EXIBICAO);
-            exibir_contratacoes();
+            exibir_contratacoes_periodicas();
         }
     }
     
     return NULL;
 }
 
-/* Iniciar timer de exibição */
 void iniciar_timer_exibicao(void) {
     timer_ativa = 1;
     pthread_create(&thread_timer, NULL, thread_exibicao_periodica, NULL);
     printf("[RH] Timer de exibição periódica iniciado (%ds)\n", INTERVALO_EXIBICAO);
 }
 
-/* Parar timer de exibição */
 void parar_timer_exibicao(void) {
     timer_ativa = 0;
     pthread_join(thread_timer, NULL);
@@ -165,20 +142,17 @@ void parar_timer_exibicao(void) {
 
 /* ========== PROCESSO DE CONTRATAÇÃO ========== */
 
-/* Thread que simula o tempo de contratação */
 void* thread_processo_contratacao(void* arg) {
     ProcessoContratacao* processo = (ProcessoContratacao*)arg;
     
     printf("[RH PROCESSO %03d] Iniciando análise...\n", processo->id);
     
-    // Simular tempo de análise (1-2 minutos em segundos)
     int tempo_analise = TEMPO_CONTRATACAO_MIN + 
                        (rand() % (TEMPO_CONTRATACAO_MAX - TEMPO_CONTRATACAO_MIN + 1));
     
     printf("[RH PROCESSO %03d] Tempo estimado: %d segundos\n", 
            processo->id, tempo_analise);
     
-    // Aguardar tempo simulado
     for (int i = 1; i <= tempo_analise; i++) {
         if (processo->estado == CANCELADO || processo->estado == REJEITADO) {
             printf("[RH PROCESSO %03d] Processo interrompido\n", processo->id);
@@ -186,14 +160,12 @@ void* thread_processo_contratacao(void* arg) {
         }
         sleep(1);
         
-        // Mostrar progresso a cada 10 segundos
         if (i % 10 == 0) {
             printf("[RH PROCESSO %03d] Em análise... %d/%d segundos\n", 
                    processo->id, i, tempo_analise);
         }
     }
     
-    // Processo concluído
     pthread_mutex_lock(&mutex);
     
     if (processo->estado == EM_ANALISE) {
@@ -204,7 +176,6 @@ void* thread_processo_contratacao(void* arg) {
         printf("[RH PROCESSO %03d] ANÁLISE CONCLUÍDA - APROVADO\n", processo->id);
         printf("[RH PROCESSO %03d] Aguardando conclusão da contratação...\n", processo->id);
         
-        // Verificar se pode ser concluído imediatamente
         int ativos = total_contratacoes - total_demissoes;
         if (ativos < LIMITE_CONTRATACOES) {
             printf("[RH PROCESSO %03d] Vaga disponível! Concluindo automaticamente...\n", processo->id);
@@ -218,11 +189,9 @@ void* thread_processo_contratacao(void* arg) {
     return NULL;
 }
 
-/* Iniciar novo processo de contratação */
 void iniciar_processo_contratacao(const char *nome, const char *cargo, float salario) {
     pthread_mutex_lock(&mutex);
     
-    // Verificar limite de processos simultâneos
     ProcessoContratacao *aux_proc = lista_processos;
     int processos_ativos = 0;
     while (aux_proc) {
@@ -239,14 +208,12 @@ void iniciar_processo_contratacao(const char *nome, const char *cargo, float sal
         return;
     }
     
-    // Verificar vagas disponíveis
     int ativos = total_contratacoes - total_demissoes;
     if (ativos >= LIMITE_CONTRATACOES) {
         printf("[RH AVISO] Limite de %d funcionários atingido! ", LIMITE_CONTRATACOES);
         printf("Processo será iniciado mas só poderá ser concluído após demissão.\n");
     }
     
-    // Criar novo processo
     ProcessoContratacao *novo = malloc(sizeof(ProcessoContratacao));
     if (!novo) {
         pthread_mutex_unlock(&mutex);
@@ -255,7 +222,9 @@ void iniciar_processo_contratacao(const char *nome, const char *cargo, float sal
     
     novo->id = ++total_processos;
     strncpy(novo->nome, nome, sizeof(novo->nome) - 1);
+    novo->nome[sizeof(novo->nome) - 1] = '\0';
     strncpy(novo->cargo, cargo, sizeof(novo->cargo) - 1);
+    novo->cargo[sizeof(novo->cargo) - 1] = '\0';
     novo->salario = salario;
     novo->estado = PENDENTE;
     novo->data_inicio = time(NULL);
@@ -273,12 +242,10 @@ void iniciar_processo_contratacao(const char *nome, const char *cargo, float sal
     
     pthread_mutex_unlock(&mutex);
     
-    // Colocar em análise automaticamente após 2 segundos
     sleep(2);
     analisar_processo(novo->id);
 }
 
-/* Colocar processo em análise */
 void analisar_processo(int id) {
     pthread_mutex_lock(&mutex);
     
@@ -289,11 +256,9 @@ void analisar_processo(int id) {
                 proc->estado = EM_ANALISE;
                 printf("[RH PROCESSO %03d] Estado: EM ANÁLISE\n", id);
                 
-                // Iniciar thread para simular tempo de análise
                 pthread_create(&proc->thread_processo, NULL, 
                               thread_processo_contratacao, proc);
                 pthread_detach(proc->thread_processo);
-                
             } else {
                 printf("[RH PROCESSO %03d] Não pode ser analisado (estado: %d)\n", 
                        id, proc->estado);
@@ -308,11 +273,9 @@ void analisar_processo(int id) {
     pthread_mutex_unlock(&mutex);
 }
 
-/* Concluir contratação */
 void concluir_contratacao(int id) {
     pthread_mutex_lock(&mutex);
     
-    // Verificar vagas
     int ativos = total_contratacoes - total_demissoes;
     if (ativos >= LIMITE_CONTRATACOES) {
         printf("[RH ERRO] Não há vagas disponíveis! (%d/%d)\n", 
@@ -328,7 +291,6 @@ void concluir_contratacao(int id) {
             proc->estado = CONTRATADO;
             proc->data_conclusao = time(NULL);
             
-            // Adicionar à lista de contratados
             adicionar_contratado(id, proc->nome, proc->cargo, proc->salario);
             
             printf("[RH] === CONTRATAÇÃO CONCLUÍDA ===\n");
@@ -350,7 +312,6 @@ void concluir_contratacao(int id) {
     pthread_mutex_unlock(&mutex);
 }
 
-/* Rejeitar processo */
 void rejeitar_processo(int id) {
     pthread_mutex_lock(&mutex);
     
@@ -375,7 +336,6 @@ void rejeitar_processo(int id) {
     pthread_mutex_unlock(&mutex);
 }
 
-/* Cancelar processo */
 void cancelar_processo(int id) {
     pthread_mutex_lock(&mutex);
     
@@ -399,7 +359,6 @@ void cancelar_processo(int id) {
 
 /* ========== FUNÇÕES DE CONTRATADOS ========== */
 
-/* Adicionar funcionário contratado */
 void adicionar_contratado(int id, const char *nome, const char *cargo, float salario) {
     Contratacao *novo = malloc(sizeof(Contratacao));
     if (!novo) return;
@@ -407,17 +366,17 @@ void adicionar_contratado(int id, const char *nome, const char *cargo, float sal
     novo->id = id;
     novo->data_contratacao = time(NULL);
     strncpy(novo->nome, nome, sizeof(novo->nome) - 1);
+    novo->nome[sizeof(novo->nome) - 1] = '\0';
     strncpy(novo->cargo, cargo, sizeof(novo->cargo) - 1);
+    novo->cargo[sizeof(novo->cargo) - 1] = '\0';
     novo->salario = salario;
     novo->prox = lista_contratados;
     lista_contratados = novo;
     total_contratacoes++;
     
-    // Verificar interrupção após adicionar
     verificar_interrupcao_rh();
 }
 
-/* Demitir funcionário */
 void demitir_funcionario(int id) {
     pthread_mutex_lock(&mutex);
 
@@ -441,7 +400,6 @@ void demitir_funcionario(int id) {
             free(atual);
             total_demissoes++;
             
-            // Verificar se há processos aprovados aguardando
             ProcessoContratacao *proc = lista_processos;
             while (proc) {
                 if (proc->estado == APROVADO) {
@@ -464,7 +422,6 @@ void demitir_funcionario(int id) {
 
 /* ========== FUNÇÕES DE RELATÓRIO ========== */
 
-/* Exibir processos */
 void exibir_processos_pendentes(void) {
     pthread_mutex_lock(&mutex);
     
@@ -479,7 +436,7 @@ void exibir_processos_pendentes(void) {
     ProcessoContratacao *proc = lista_processos;
     int count = 0;
     
-    while (proc && count < 10) { // Mostra apenas 10
+    while (proc && count < 10) {
         printf("\n[RH] ID: %03d\n", proc->id);
         printf("[RH] Nome: %s\n", proc->nome);
         printf("[RH] Cargo: %s\n", proc->cargo);
@@ -521,7 +478,6 @@ void exibir_processos_pendentes(void) {
     pthread_mutex_unlock(&mutex);
 }
 
-/* Exibir contratados */
 void exibir_contratacoes(void) {
     pthread_mutex_lock(&mutex);
 
@@ -536,7 +492,7 @@ void exibir_contratacoes(void) {
         printf("[RH] Nenhum funcionário contratado.\n");
     } else {
         int count = 0;
-        while (aux && count < 5) { // Mostra apenas 5 mais recentes
+        while (aux && count < 5) {
             char buffer[26];
             struct tm *tm_info = localtime(&aux->data_contratacao);
             strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
@@ -566,7 +522,23 @@ void exibir_contratacoes(void) {
     pthread_mutex_unlock(&mutex);
 }
 
-/* Exibir estatísticas */
+void exibir_contratacoes_periodicas(void) {
+    pthread_mutex_lock(&mutex);
+    
+    int ativos = total_contratacoes - total_demissoes;
+    
+    printf("\n═══════════════════════════════════\n");
+    printf("   RELATÓRIO PERIÓDICO DE RH\n");
+    printf("═══════════════════════════════════\n");
+    printf("  Funcionários ativos: %d/%d\n", ativos, LIMITE_CONTRATACOES);
+    printf("  Vagas disponíveis:   %d\n", LIMITE_CONTRATACOES - ativos);
+    printf("  Total contratações:  %d\n", total_contratacoes);
+    printf("  Total demissões:     %d\n", total_demissoes);
+    printf("═══════════════════════════════════\n\n");
+    
+    pthread_mutex_unlock(&mutex);
+}
+
 void exibir_estatisticas(void) {
     pthread_mutex_lock(&mutex);
     
@@ -615,7 +587,6 @@ void exibir_estatisticas(void) {
 
 /* ========== FUNÇÕES AUXILIARES ========== */
 
-/* Obter vagas disponíveis */
 int get_vagas_disponiveis(void) {
     pthread_mutex_lock(&mutex);
     int ativos = total_contratacoes - total_demissoes;
@@ -625,7 +596,6 @@ int get_vagas_disponiveis(void) {
     return vagas;
 }
 
-/* Obter total de contratações */
 int get_total_contratacoes(void) {
     pthread_mutex_lock(&mutex);
     int c = total_contratacoes;
@@ -633,7 +603,6 @@ int get_total_contratacoes(void) {
     return c;
 }
 
-/* Obter total de demissões */
 int get_total_demissoes(void) {
     pthread_mutex_lock(&mutex);
     int d = total_demissoes;
@@ -641,23 +610,19 @@ int get_total_demissoes(void) {
     return d;
 }
 
-/* Obter funcionários ativos */
 int get_funcionarios_ativos(void) {
     return get_total_contratacoes() - get_total_demissoes();
 }
 
-/* Limpar todas as listas */
 void limpar_lista(void) {
     pthread_mutex_lock(&mutex);
 
-    // Limpar lista de contratados
     while (lista_contratados) {
         Contratacao *tmp = lista_contratados;
         lista_contratados = lista_contratados->prox;
         free(tmp);
     }
     
-    // Limpar lista de processos
     while (lista_processos) {
         ProcessoContratacao *tmp = lista_processos;
         lista_processos = lista_processos->prox;

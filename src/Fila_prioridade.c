@@ -21,10 +21,7 @@ FilaPrioridade* inicializar_fila() {
     pthread_mutex_init(&fila->lock, NULL);
     
     // Inicializar semáforos
-    // semaforo_clientes: começa com 0 (nenhum cliente disponível)
     sem_init(&fila->semaforo_clientes, 0, 0);
-    
-    // semaforo_espaco: começa com MAX_FILA (espaço disponível)
     sem_init(&fila->semaforo_espaco, 0, MAX_FILA);
     
     return fila;
@@ -45,7 +42,6 @@ void liberar_fila(FilaPrioridade* fila) {
     
     pthread_mutex_unlock(&fila->lock);
     
-    // Destruir mutex e semáforos
     pthread_mutex_destroy(&fila->lock);
     sem_destroy(&fila->semaforo_clientes);
     sem_destroy(&fila->semaforo_espaco);
@@ -53,87 +49,82 @@ void liberar_fila(FilaPrioridade* fila) {
     free(fila);
 }
 
+/* Retorna o tamanho atual da fila */
+int tamanho_fila(FilaPrioridade* fila) {
+    if (!fila) return 0;
+    
+    pthread_mutex_lock(&fila->lock);
+    int tamanho = fila->tamanho;
+    pthread_mutex_unlock(&fila->lock);
+    
+    return tamanho;
+}
+
 /* Calcula prioridade dinâmica com AGING */
 int calcular_prioridade_cliente(Cliente* cliente) {
     if (!cliente) return 0;
     
-    // Prioridade base: Empresa = 10, Público = 1
     int prioridade_base = (cliente->tipo == EMPRESA) ? 10 : 1;
     
-    // AGING: aumenta 1 ponto a cada 30 segundos de espera
     time_t agora = time(NULL);
     double tempo_espera = difftime(agora, cliente->timestamp);
     int bonus_aging = (int)(tempo_espera / 30);
     
-    // Limita o aging para não ultrapassar prioridade de empresa
     if (cliente->tipo == PUBLICO && bonus_aging > 8) {
         bonus_aging = 8; 
     }
     
     int prioridade_total = prioridade_base + bonus_aging;
-    cliente->prioridade_calculada = prioridade_total;  // Cache
+    cliente->prioridade_calculada = prioridade_total;
     
     return prioridade_total;
 }
 
-/* Insere cliente na posição correta baseado na prioridade (COM SEMÁFOROS) */
+/* Insere cliente na posição correta baseado na prioridade */
 void inserir_cliente(FilaPrioridade* fila, int id_cliente, TipoCliente tipo) {
     if (!fila) return;
     
-    // Aguardar espaço disponível na fila (sem_wait no semáforo de espaço)
     sem_wait(&fila->semaforo_espaco);
     
     pthread_mutex_lock(&fila->lock);
     
-    // Criar novo nó
     Node* novo = (Node*)malloc(sizeof(Node));
     if (!novo) {
         pthread_mutex_unlock(&fila->lock);
-        sem_post(&fila->semaforo_espaco); // Liberar espaço se falhar
+        sem_post(&fila->semaforo_espaco);
         return;
     }
     
-    // Preenche dados do cliente
     novo->cliente.id_cliente = id_cliente;
     novo->cliente.tipo = tipo;
     novo->cliente.timestamp = time(NULL);
     novo->cliente.prioridade_calculada = 0;
     novo->next = NULL;
     
-    // Calcula prioridade
     calcular_prioridade_cliente(&novo->cliente);
     
-    // Caso 1: Fila vazia
     if (fila->frente == NULL) {
         fila->frente = fila->fim = novo;
         fila->tamanho++;
-        
-        // Sinalizar que há um cliente disponível
         sem_post(&fila->semaforo_clientes);
-        
         pthread_mutex_unlock(&fila->lock);
         return;
     }
     
-    // Caso 2: Inserir ordenado por prioridade (maior primeiro)
     Node* atual = fila->frente;
     Node* anterior = NULL;
     int prioridade_novo = novo->cliente.prioridade_calculada;
     
-    // Encontra posição correta
     while (atual != NULL && 
            calcular_prioridade_cliente(&atual->cliente) >= prioridade_novo) {
         anterior = atual;
         atual = atual->next;
     }
     
-    // Insere na posição encontrada
     if (anterior == NULL) {
-        // Insere no início
         novo->next = fila->frente;
         fila->frente = novo;
     } else {
-        // Insere no meio/fim
         anterior->next = novo;
         novo->next = atual;
         
@@ -143,25 +134,22 @@ void inserir_cliente(FilaPrioridade* fila, int id_cliente, TipoCliente tipo) {
     }
     
     fila->tamanho++;
-    
-    // Sinalizar que há um cliente disponível
     sem_post(&fila->semaforo_clientes);
     
     pthread_mutex_unlock(&fila->lock);
 }
 
-/* Obtém próximo cliente (maior prioridade) sem remover (COM SEMÁFOROS) */
+/* Obtém próximo cliente sem remover */
 Cliente* obter_proximo_cliente(FilaPrioridade* fila) {
     if (!fila) return NULL;
     
-    // Aguardar cliente disponível
     sem_wait(&fila->semaforo_clientes);
     
     pthread_mutex_lock(&fila->lock);
     
     if (fila->frente == NULL) {
         pthread_mutex_unlock(&fila->lock);
-        sem_post(&fila->semaforo_clientes); // Correção se fila vazia
+        sem_post(&fila->semaforo_clientes);
         return NULL;
     }
     
@@ -172,13 +160,12 @@ Cliente* obter_proximo_cliente(FilaPrioridade* fila) {
     return cliente;
 }
 
-/* Remove cliente específico após processamento (COM SEMÁFOROS) */
+/* Remove cliente específico após processamento */
 void remover_cliente_processado(FilaPrioridade* fila, int id_cliente) {
     if (!fila) return;
     
     pthread_mutex_lock(&fila->lock);
     
-    // Se fila vazia, não há o que remover
     if (fila->frente == NULL) {
         pthread_mutex_unlock(&fila->lock);
         return;
@@ -187,27 +174,22 @@ void remover_cliente_processado(FilaPrioridade* fila, int id_cliente) {
     Node* atual = fila->frente;
     Node* anterior = NULL;
     
-    // Busca o cliente pelo ID
     while (atual != NULL && atual->cliente.id_cliente != id_cliente) {
         anterior = atual;
         atual = atual->next;
     }
     
     if (atual == NULL) {
-        // Cliente não encontrado
         pthread_mutex_unlock(&fila->lock);
         return;
     }
     
-    // Remove o nó
     if (anterior == NULL) {
-        // Remove do início
         fila->frente = atual->next;
         if (fila->frente == NULL) {
             fila->fim = NULL;
         }
     } else {
-        // Remove do meio/fim
         anterior->next = atual->next;
         if (atual->next == NULL) {
             fila->fim = anterior;
@@ -217,13 +199,12 @@ void remover_cliente_processado(FilaPrioridade* fila, int id_cliente) {
     free(atual);
     fila->tamanho--;
     
-    // Libera um espaço na fila (sinaliza semáforo de espaço)
     sem_post(&fila->semaforo_espaco);
     
     pthread_mutex_unlock(&fila->lock);
 }
 
-/* Processa vendas para um turno (INTEGRAÇÃO COM ESTOQUE) - COM SEMÁFOROS */
+/* Processa vendas para um turno */
 int processar_vendas_turno(FilaPrioridade* fila, Turno turno_atual) {
     if (!fila) return 0;
     
@@ -243,7 +224,6 @@ int processar_vendas_turno(FilaPrioridade* fila, Turno turno_atual) {
            limite);
     
     while (vendas_realizadas < limite) {
-        // 1. Verificar se há estoque disponível
         int disponivel = estoque_disponivel();
         if (disponivel <= 0) {
             printf("[ESTOQUE ESGOTADO] Vendidos: %d/%d\n", 
@@ -251,12 +231,10 @@ int processar_vendas_turno(FilaPrioridade* fila, Turno turno_atual) {
             break;
         }
         
-        // 2. Aguardar cliente usando semáforo (com timeout)
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += 2; // Timeout de 2 segundos
+        ts.tv_sec += 2;
         
-        // Tentar obter cliente com timeout
         if (sem_timedwait(&fila->semaforo_clientes, &ts) == -1) {
             printf("[FILA VAZIA - TIMEOUT] Vendidos: %d/%d\n", 
                    vendas_realizadas, limite);
@@ -265,10 +243,9 @@ int processar_vendas_turno(FilaPrioridade* fila, Turno turno_atual) {
         
         pthread_mutex_lock(&fila->lock);
         
-        // Verificar se ainda há cliente após obter o semáforo
         if (fila->frente == NULL) {
             pthread_mutex_unlock(&fila->lock);
-            sem_post(&fila->semaforo_clientes); // Correção
+            sem_post(&fila->semaforo_clientes);
             continue;
         }
         
@@ -280,15 +257,13 @@ int processar_vendas_turno(FilaPrioridade* fila, Turno turno_atual) {
         
         pthread_mutex_unlock(&fila->lock);
         
-        // 3. Tentar reservar cartão
         int cartao_id = reservar_proximo_cartao();
         if (cartao_id == -1) {
             printf("[ERRO] Não foi possível reservar cartão\n");
-            sem_post(&fila->semaforo_clientes); // Liberar cliente novamente
+            sem_post(&fila->semaforo_clientes);
             break;
         }
         
-        // 4. Registrar venda
         char* tipo_str = (tipo == EMPRESA) ? "EMPRESA" : "PUBLICO";
         char tempo_espera_str[50];
         time_t agora = time(NULL);
@@ -305,15 +280,12 @@ int processar_vendas_turno(FilaPrioridade* fila, Turno turno_atual) {
         printf("Cartão: %03d | Prioridade: %d | Espera: %s\n",
                cartao_id, prioridade, tempo_espera_str);
         
-        // 5. Remover cliente da fila (isso libera o semáforo de espaço)
         remover_cliente_processado(fila, id_cliente);
         
         vendas_realizadas++;
         
-        // Simular tempo de processamento
-        usleep(100000); // 100ms
+        usleep(100000);
         
-        // 7. Verificar cenário especial (30 empresas após estoque vazio)
         if (disponivel == 1 && vendas_realizadas < limite) {
             printf("[ALERTA] Último cartão disponível!\n");
         }
@@ -335,7 +307,6 @@ void imprimir_fila(FilaPrioridade* fila) {
     printf("\n=== FILA DE VENDAS (Ordenada por Prioridade) ===\n");
     printf("Tamanho: %d clientes (Máx: %d)\n", fila->tamanho, MAX_FILA);
     
-    // Verificar semáforos
     int sem_valor_clientes, sem_valor_espaco;
     sem_getvalue(&fila->semaforo_clientes, &sem_valor_clientes);
     sem_getvalue(&fila->semaforo_espaco, &sem_valor_espaco);
@@ -369,7 +340,7 @@ void imprimir_fila(FilaPrioridade* fila) {
     pthread_mutex_unlock(&fila->lock);
 }
 
-/* Bloquear vendas públicas (COM SEMÁFOROS) */
+/* Bloquear vendas públicas */
 void bloquear_vendas_publico(FilaPrioridade* fila) {
     if (!fila) return;
     
@@ -399,9 +370,7 @@ void bloquear_vendas_publico(FilaPrioridade* fila) {
             fila->tamanho--;
             removidos++;
             
-            // Ajustar semáforos para cada cliente público removido
-            sem_post(&fila->semaforo_espaco); // Libera espaço
-            // Não precisa ajustar semáforo_clientes pois já estava consumido
+            sem_post(&fila->semaforo_espaco);
         } else {
             anterior = atual;
             atual = atual->next;
@@ -415,13 +384,13 @@ void bloquear_vendas_publico(FilaPrioridade* fila) {
     }
 }
 
-/* Adiciona lote de empresas (cenário do enunciado - 30 empresas) */
+/* Adiciona lote de empresas */
 void adicionar_lote_empresas(FilaPrioridade* fila, int quantidade) {
     if (!fila || quantidade <= 0) return;
     
     printf("[LOTE] Adicionando %d solicitações de empresas...\n", quantidade);
     
-    static int next_client_id = 1000;  
+    static int next_client_id = 1000;
     
     for (int i = 0; i < quantidade; i++) {
         inserir_cliente(fila, next_client_id++, EMPRESA);
