@@ -25,10 +25,15 @@ typedef struct {
     int total_vendas;
     int vendas_empresas;
     int vendas_publico;
-    int vendas_por_turno[3];
+    int vendas_por_turno[3]; // 0=MANHA, 1=TARDE, 2=NOITE
 } EstatisticasVendas;
 
-// Protótipos
+// Variáveis globais exportadas
+extern Agencia agencias[NUM_AGENCIAS];
+extern EstatisticasVendas estatisticas_vendas;
+extern pthread_mutex_t stats_lock;
+
+// Protótipos das funções públicas
 void inicializar_sistema_vendas(FilaPrioridade* fila_global);
 void iniciar_turno_vendas(Turno turno);
 void iniciar_vendas_concorrentes(Turno turno);
@@ -38,9 +43,11 @@ void exibir_relatorio_agencias(void);
 void exportar_vendas_csv(const char* filename);
 void reinicializar_vendas(void);
 
-// Funções auxiliares (para testes)
+// Getters para outros módulos
 int get_vendas_totais(void);
 int get_vendas_empresas(void);
 int get_vendas_publico(void);
+int vendas_sistema_ativo(void);
+FilaPrioridade* get_fila_global(void);
 
 #endif

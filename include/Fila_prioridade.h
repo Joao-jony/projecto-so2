@@ -5,18 +5,16 @@
 #include <semaphore.h>
 #include <time.h>
 
-#define MAX_FILA 200
-
-typedef enum Turno {
-    MANHA,
-    TARDE,
-    NOITE
-} Turno;
-
 typedef enum {
     EMPRESA,
     PUBLICO
 } TipoCliente;
+
+typedef enum {
+    MANHA,
+    TARDE,
+    NOITE
+} Turno;
 
 typedef struct {
     int id_cliente;
@@ -34,11 +32,12 @@ typedef struct {
     Node* frente;
     Node* fim;
     int tamanho;
-    pthread_mutex_t lock;
-    sem_t semaforo_clientes;  
-    sem_t semaforo_espaco;   
+    pthread_mutex_t lock;       // Mutex para exclusão mútua
+    sem_t semaforo_clientes;    // Semáforo para controle de clientes disponíveis
+    sem_t semaforo_espaco;      // Semáforo para controle de espaço na fila
 } FilaPrioridade;
 
+// Protótipos das funções
 FilaPrioridade* inicializar_fila(void);
 void liberar_fila(FilaPrioridade* fila);
 void inserir_cliente(FilaPrioridade* fila, int id_cliente, TipoCliente tipo);
@@ -49,6 +48,8 @@ void imprimir_fila(FilaPrioridade* fila);
 void bloquear_vendas_publico(FilaPrioridade* fila);
 void adicionar_lote_empresas(FilaPrioridade* fila, int quantidade);
 int calcular_prioridade_cliente(Cliente* cliente);
-int tamanho_fila(FilaPrioridade* fila);
+
+// Getter para tamanho máximo da fila
+int get_max_fila(void);
 
 #endif

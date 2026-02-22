@@ -4,6 +4,19 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/syscall.h>
+#include <time.h>
+#include <stdio.h>
+#include <pthread.h>
+
+/* Para sistemas Linux, definir SYS_gettid se não estiver definido */
+#ifndef SYS_gettid
+#ifdef __NR_gettid
+#define SYS_gettid __NR_gettid
+#else
+#define SYS_gettid 186  /* Valor comum para x86_64 */
+#endif
+#endif
 
 static FILE* log_file = NULL;
 static LogLevel current_level = LOG_INFO;
@@ -79,7 +92,7 @@ char* get_current_time_str(void) {
     time_t now = time(NULL);
     struct tm* tm_info = localtime(&now);
     
-    char* buffer = malloc(20);
+    char* buffer = (char*)malloc(20);
     if (buffer) {
         strftime(buffer, 20, "%Y-%m-%d %H:%M:%S", tm_info);
     }
@@ -119,11 +132,28 @@ void thread_safe_printf(const char* format, ...) {
     pthread_mutex_unlock(&log_mutex);
 }
 
-/* Obter ID da thread */
+/* Obter ID da thread - VERSÃO CORRIGIDA */
 int get_thread_id(void) {
 #ifdef __linux__
-    return (int)syscall(SYS_gettid);
+    /* Método 1: usar syscall */
+    #ifdef SYS_gettid
+        return (int)syscall(SYS_gettid);
+    #else
+        /* Método 2: usar gettid (glibc 2.30+) */
+        #ifdef __GLIBC__
+            #if __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 30
+                return (int)gettid();
+            #else
+                /* Método 3: usar pthread_self como fallback */
+                return (int)(unsigned long)pthread_self();
+            #endif
+        #else
+            /* Não é glibc, usar pthread_self */
+            return (int)(unsigned long)pthread_self();
+        #endif
+    #endif
 #else
-    return (int)pthread_self();
+    /* Não é Linux, usar pthread_self */
+    return (int)(unsigned long)pthread_self();
 #endif
 }

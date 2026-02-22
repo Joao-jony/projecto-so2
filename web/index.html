@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNITEL - Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="title">
+                    <span class="icon">
+                        <img class="logo" 
+                             src="img/unitel_logo_sem_fundo.png" 
+                             alt="UNITEL"
+                             onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2240%22%20height%3D%2240%22%20viewBox%3D%220%200%20100%20100%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20fill%3D%22%23FF6B00%22%2F%3E%3Ctext%20x%3D%2220%22%20y%3D%2265%22%20fill%3D%22white%22%20font-size%3D%2250%22%3EU%3C%2Ftext%3E%3C%2Fsvg%3E';">
+                    </span>
+                </h1>
+                <div class="status-bar">
+                    <div class="status-item">
+                        <span class="status-label">Última atualização:</span>
+                        <span id="timestamp" class="timestamp">--:--:--</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-badge online"><i class="fas fa-circle"></i> Online</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Cards de Resumo -->
+        <div class="summary-cards">
+            <div class="card" id="card-estoque">
+                <div class="card-header">
+                    <span class="card-icon"><i class="fas fa-boxes"></i></span>
+                    <span class="card-title">Estoque</span>
+                </div>
+                <div class="card-value" id="estoque-disponivel">-</div>
+                <div class="card-footer">
+                    <span class="card-label">Disponíveis</span>
+                    <span class="card-total">Total: <span id="estoque-total">100</span></span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-estoque" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="card" id="card-rh">
+                <div class="card-header">
+                    <span class="card-icon"><i class="fas fa-users"></i></span>
+                    <span class="card-title">RH</span>
+                </div>
+                <div class="card-value" id="rh-ativos">-</div>
+                <div class="card-footer">
+                    <span class="card-label">Funcionários ativos</span>
+                    <span class="card-total">Limite: <span id="rh-limite">100</span></span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-rh" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="card" id="card-vendas">
+                <div class="card-header">
+                    <span class="card-icon"><i class="fas fa-chart-line"></i></span>
+                    <span class="card-title">Vendas</span>
+                </div>
+                <div class="card-value" id="vendas-total">-</div>
+                <div class="card-footer">
+                    <div class="stats-mini">
+                        <span><i class="fas fa-building"></i> <span id="vendas-empresas">0</span></span>
+                        <span><i class="fas fa-user"></i> <span id="vendas-publico">0</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" id="card-fila">
+                <div class="card-header">
+                    <span class="card-icon"><i class="fas fa-users-between-lines"></i></span>
+                    <span class="card-title">Fila</span>
+                </div>
+                <div class="card-value" id="fila-tamanho">-</div>
+                <div class="card-footer">
+                    <span class="card-label"><i class="fas fa-hourglass-half"></i> Clientes aguardando</span>
+                    <span class="card-total">Máx: 200</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grid Principal -->
+        <div class="grid-container">
+            <!-- Coluna Esquerda -->
+            <div class="grid-left">
+                <!-- Gráfico de Vendas por Turno -->
+                <div class="chart-card">
+                    <div class="card-header">
+                        <span class="card-icon"><i class="fas fa-chart-pie"></i></span>
+                        <span class="card-title">Vendas por Turno</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chart-turnos"></canvas>
+                    </div>
+                    <div class="chart-legend" id="legend-turnos"></div>
+                </div>
+
+                <!-- Lista de Clientes na Fila -->
+                <div class="table-card">
+                    <div class="card-header">
+                        <span class="card-icon"><i class="fas fa-list-ol"></i></span>
+                        <span class="card-title">Fila de Atendimento</span>
+                        <span class="badge" id="fila-count-badge"><i class="fas fa-user-clock"></i> 0 clientes</span>
+                    </div>
+                    <div class="table-container">
+                        <table id="tabela-fila">
+                            <thead>
+                                <tr>
+                                    <th><i class="fas fa-hashtag"></i> Posição</th>
+                                    <th><i class="fas fa-user"></i> Cliente</th>
+                                    <th><i class="fas fa-tag"></i> Tipo</th>
+                                    <th><i class="fas fa-exclamation-triangle"></i> Prioridade</th>
+                                    <th><i class="fas fa-clock"></i> Espera</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fila-body">
+                                <tr><td colspan="5" class="empty-message"><i class="fas fa-spinner fa-spin"></i> Carregando fila...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna Direita -->
+            <div class="grid-right">
+                <!-- Chips/Cartões Vendidos -->
+                <div class="card chips-card">
+                    <div class="card-header">
+                        <span class="card-icon"><i class="fas fa-sim-card"></i></span>
+                        <span class="card-title">Chips/Cartões Vendidos</span>
+                    </div>
+                    <div class="cartoes-list" id="lista-cartoes">
+                        <div class="loading"><i class="fas fa-spinner fa-spin"></i> Carregando...</div>
+                    </div>
+                </div>
+
+                <!-- Agências -->
+                <div class="card agencias-card">
+                    <div class="card-header">
+                        <span class="card-icon"><i class="fas fa-building"></i></span>
+                        <span class="card-title">Agências</span>
+                    </div>
+                    <div class="agencias-list" id="lista-agencias">
+                        <div class="loading"><i class="fas fa-spinner fa-spin"></i> Carregando...</div>
+                    </div>
+                </div>
+
+                <!-- Controles de Operação -->
+                <div class="card operacoes-card">
+                    <div class="card-header">
+                        <span class="card-icon"><i class="fas fa-sliders-h"></i></span>
+                        <span class="card-title">Operações Rápidas</span>
+                    </div>
+                    <div class="controls">
+                        <button id="btn-contratar" class="btn btn-primary">
+                            <span class="btn-icon"><i class="fas fa-user-plus"></i></span>
+                            Iniciar Contratação
+                        </button>
+                        <button id="btn-demitir" class="btn btn-danger">
+                            <span class="btn-icon"><i class="fas fa-user-minus"></i></span>
+                            Demitir Funcionário
+                        </button>
+                        <button id="btn-atualizar" class="btn btn-secondary">
+                            <span class="btn-icon"><i class="fas fa-sync-alt"></i></span>
+                            Atualizar Dados
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rodapé -->
+        <footer class="footer">
+            <div class="footer-content">
+                <span>© 2025 UNITEL - Sistema de Vendas e RH</span>
+                <span class="separator">|</span>
+                <span><i class="fas fa-cloud"></i> API v1.0.0</span>
+                <span class="separator">|</span>
+                <span><i class="fas fa-sync fa-spin"></i> Atualização automática a cada 5s</span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

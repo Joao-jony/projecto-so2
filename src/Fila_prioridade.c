@@ -3,13 +3,19 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
 #include "Fila_prioridade.h"
 #include "estoque.h"
 
 #define MAX_FILA 200  // Tamanho máximo da fila
 
+/* Getter para tamanho máximo */
+int get_max_fila(void) {
+    return MAX_FILA;
+}
+
 /* Inicializa fila com mutex e semáforos */
-FilaPrioridade* inicializar_fila() {
+FilaPrioridade* inicializar_fila(void) {
     FilaPrioridade* fila = (FilaPrioridade*)malloc(sizeof(FilaPrioridade));
     if (!fila) return NULL;
     
@@ -42,6 +48,7 @@ void liberar_fila(FilaPrioridade* fila) {
     
     pthread_mutex_unlock(&fila->lock);
     
+    // Destruir mutex e semáforos
     pthread_mutex_destroy(&fila->lock);
     sem_destroy(&fila->semaforo_clientes);
     sem_destroy(&fila->semaforo_espaco);
@@ -49,27 +56,19 @@ void liberar_fila(FilaPrioridade* fila) {
     free(fila);
 }
 
-/* Retorna o tamanho atual da fila */
-int tamanho_fila(FilaPrioridade* fila) {
-    if (!fila) return 0;
-    
-    pthread_mutex_lock(&fila->lock);
-    int tamanho = fila->tamanho;
-    pthread_mutex_unlock(&fila->lock);
-    
-    return tamanho;
-}
-
 /* Calcula prioridade dinâmica com AGING */
 int calcular_prioridade_cliente(Cliente* cliente) {
     if (!cliente) return 0;
     
+    // Prioridade base: Empresa = 10, Público = 1
     int prioridade_base = (cliente->tipo == EMPRESA) ? 10 : 1;
     
+    // AGING: aumenta 1 ponto a cada 30 segundos de espera
     time_t agora = time(NULL);
     double tempo_espera = difftime(agora, cliente->timestamp);
     int bonus_aging = (int)(tempo_espera / 30);
     
+    // Limita o aging para não ultrapassar prioridade de empresa
     if (cliente->tipo == PUBLICO && bonus_aging > 8) {
         bonus_aging = 8; 
     }
@@ -84,10 +83,12 @@ int calcular_prioridade_cliente(Cliente* cliente) {
 void inserir_cliente(FilaPrioridade* fila, int id_cliente, TipoCliente tipo) {
     if (!fila) return;
     
+    // Aguardar espaço disponível na fila
     sem_wait(&fila->semaforo_espaco);
     
     pthread_mutex_lock(&fila->lock);
     
+    // Criar novo nó
     Node* novo = (Node*)malloc(sizeof(Node));
     if (!novo) {
         pthread_mutex_unlock(&fila->lock);
@@ -95,22 +96,27 @@ void inserir_cliente(FilaPrioridade* fila, int id_cliente, TipoCliente tipo) {
         return;
     }
     
+    // Preenche dados do cliente
     novo->cliente.id_cliente = id_cliente;
     novo->cliente.tipo = tipo;
     novo->cliente.timestamp = time(NULL);
     novo->cliente.prioridade_calculada = 0;
     novo->next = NULL;
     
+    // Calcula prioridade
     calcular_prioridade_cliente(&novo->cliente);
     
+    // Caso 1: Fila vazia
     if (fila->frente == NULL) {
         fila->frente = fila->fim = novo;
         fila->tamanho++;
+        
         sem_post(&fila->semaforo_clientes);
         pthread_mutex_unlock(&fila->lock);
         return;
     }
     
+    // Caso 2: Inserir ordenado por prioridade (maior primeiro)
     Node* atual = fila->frente;
     Node* anterior = NULL;
     int prioridade_novo = novo->cliente.prioridade_calculada;
@@ -135,15 +141,17 @@ void inserir_cliente(FilaPrioridade* fila, int id_cliente, TipoCliente tipo) {
     
     fila->tamanho++;
     sem_post(&fila->semaforo_clientes);
-    
     pthread_mutex_unlock(&fila->lock);
 }
 
-/* Obtém próximo cliente sem remover */
+/* Obtém próximo cliente (maior prioridade) sem remover */
 Cliente* obter_proximo_cliente(FilaPrioridade* fila) {
     if (!fila) return NULL;
     
-    sem_wait(&fila->semaforo_clientes);
+    // Aguardar cliente disponível
+    if (sem_wait(&fila->semaforo_clientes) == -1) {
+        return NULL;
+    }
     
     pthread_mutex_lock(&fila->lock);
     
@@ -200,7 +208,6 @@ void remover_cliente_processado(FilaPrioridade* fila, int id_cliente) {
     fila->tamanho--;
     
     sem_post(&fila->semaforo_espaco);
-    
     pthread_mutex_unlock(&fila->lock);
 }
 
@@ -208,8 +215,7 @@ void remover_cliente_processado(FilaPrioridade* fila, int id_cliente) {
 int processar_vendas_turno(FilaPrioridade* fila, Turno turno_atual) {
     if (!fila) return 0;
     
-    int limite, vendas_realizadas = 0;
-    
+    int limite;
     switch (turno_atual) {
         case MANHA: limite = 35; break;
         case TARDE: limite = 35; break;
@@ -219,9 +225,11 @@ int processar_vendas_turno(FilaPrioridade* fila, Turno turno_atual) {
     
     printf("\n=== INICIANDO TURNO ===\n");
     printf("Turno: %s | Limite: %d vendas\n", 
-           (turno_atual == MANHA) ? "MANHÃ" : 
-           (turno_atual == TARDE) ? "TARDE" : "NOITE", 
+           turno_atual == MANHA ? "MANHÃ" : 
+           turno_atual == TARDE ? "TARDE" : "NOITE", 
            limite);
+    
+    int vendas_realizadas = 0;
     
     while (vendas_realizadas < limite) {
         int disponivel = estoque_disponivel();
@@ -231,12 +239,9 @@ int processar_vendas_turno(FilaPrioridade* fila, Turno turno_atual) {
             break;
         }
         
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += 2;
-        
-        if (sem_timedwait(&fila->semaforo_clientes, &ts) == -1) {
-            printf("[FILA VAZIA - TIMEOUT] Vendidos: %d/%d\n", 
+        // Aguardar cliente
+        if (sem_wait(&fila->semaforo_clientes) == -1) {
+            printf("[FILA VAZIA] Vendidos: %d/%d\n", 
                    vendas_realizadas, limite);
             break;
         }
@@ -265,30 +270,17 @@ int processar_vendas_turno(FilaPrioridade* fila, Turno turno_atual) {
         }
         
         char* tipo_str = (tipo == EMPRESA) ? "EMPRESA" : "PUBLICO";
-        char tempo_espera_str[50];
-        time_t agora = time(NULL);
-        double espera = difftime(agora, chegada);
-        
-        if (espera < 60) {
-            sprintf(tempo_espera_str, "%.0f segundos", espera);
-        } else {
-            sprintf(tempo_espera_str, "%.1f minutos", espera/60.0);
-        }
+        double espera = difftime(time(NULL), chegada);
         
         printf("[VENDA %02d/%d] %-7s | Cliente: %03d | ", 
                vendas_realizadas + 1, limite, tipo_str, id_cliente);
-        printf("Cartão: %03d | Prioridade: %d | Espera: %s\n",
-               cartao_id, prioridade, tempo_espera_str);
+        printf("Cartão: %03d | Prioridade: %d | Espera: %.0fs\n",
+               cartao_id, prioridade, espera);
         
         remover_cliente_processado(fila, id_cliente);
-        
         vendas_realizadas++;
         
         usleep(100000);
-        
-        if (disponivel == 1 && vendas_realizadas < limite) {
-            printf("[ALERTA] Último cartão disponível!\n");
-        }
     }
     
     printf("=== FIM DO TURNO ===\n");
@@ -307,23 +299,16 @@ void imprimir_fila(FilaPrioridade* fila) {
     printf("\n=== FILA DE VENDAS (Ordenada por Prioridade) ===\n");
     printf("Tamanho: %d clientes (Máx: %d)\n", fila->tamanho, MAX_FILA);
     
-    int sem_valor_clientes, sem_valor_espaco;
-    sem_getvalue(&fila->semaforo_clientes, &sem_valor_clientes);
-    sem_getvalue(&fila->semaforo_espaco, &sem_valor_espaco);
-    printf("Semáforo Clientes: %d | Semáforo Espaço: %d\n", 
-           sem_valor_clientes, sem_valor_espaco);
-    
     Node* atual = fila->frente;
     int pos = 1;
     
     while (atual != NULL) {
         Cliente* c = &atual->cliente;
         int prioridade = calcular_prioridade_cliente(c);
-        time_t agora = time(NULL);
-        double espera = difftime(agora, c->timestamp);
+        double espera = difftime(time(NULL), c->timestamp);
         
         printf("%2d. [%s] Cliente %03d | ", pos++,
-               (c->tipo == EMPRESA) ? "EMP" : "PUB",
+               c->tipo == EMPRESA ? "EMP" : "PUB",
                c->id_cliente);
         printf("Prioridade: %2d | Espera: ", prioridade);
         
@@ -369,7 +354,6 @@ void bloquear_vendas_publico(FilaPrioridade* fila) {
             free(remover);
             fila->tamanho--;
             removidos++;
-            
             sem_post(&fila->semaforo_espaco);
         } else {
             anterior = atual;
